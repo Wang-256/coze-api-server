@@ -25,8 +25,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 6. 核心：真正生效的Chat接口（对接Coze AI）
-// 移除注释，完善逻辑+错误日志
+// 6. 核心：真正生效的Chat接口（对接Coze V3 AI接口）
 app.post('/api/chat', async (req, res) => {
   // 提前定义变量，确保catch里能访问
   let cozeApiKey, cozeEndpoint, cozeModelId;
@@ -50,8 +49,9 @@ app.post('/api/chat', async (req, res) => {
 
     // ===== 第三步：读取Railway环境变量（Coze配置）=====
     cozeApiKey = process.env.COZE_API_KEY;
-    cozeEndpoint = process.env.COZE_API_ENDPOINT || "https://api.coze.cn/v1/chat/completions";
-    cozeModelId = process.env.COZE_MODEL_ID;
+    // 核心修改1：默认地址改为Coze V3接口（替代失效的V1地址）
+    cozeEndpoint = process.env.COZE_API_ENDPOINT || "https://api.coze.cn/v3/chat";
+    cozeModelId = process.env.COZE_MODEL_ID; // 这里是Bot ID（7635586965693825030）
 
     // 校验配置是否完整
     if (!cozeApiKey) {
@@ -71,19 +71,27 @@ app.post('/api/chat', async (req, res) => {
       });
     }
 
-    // ===== 第四步：调用Coze官方接口 =====
-    console.log("开始调用Coze接口：", {
+    // ===== 第四步：调用Coze V3官方接口 =====
+    console.log("开始调用Coze V3接口：", {
       endpoint: cozeEndpoint,
-      modelId: cozeModelId,
+      botId: cozeModelId,
       message: message.substring(0, 20) + "..." // 只打印前20字，避免日志过长
     });
 
     const cozeResponse = await axios.post(
       cozeEndpoint,
       {
-        model: cozeModelId,
-        messages: [{ role: "user", content: message }], // Coze要求的消息格式
-        stream: false // 关闭流式响应，新手优先用同步响应
+        // 核心修改2：适配V3接口的参数格式
+        bot_id: cozeModelId, // 机器人ID（你的7635586965693825030）
+        user_id: "mini_program_user_001", // 固定用户ID（标识对话用户，随便填）
+        stream: false, // 关闭流式响应，同步返回结果
+        additional_messages: [
+          {
+            role: "user",
+            content: message, // 用户发送的消息
+            content_type: "text" // 消息类型为文本
+          }
+        ]
       },
       {
         headers: {
@@ -94,27 +102,28 @@ app.post('/api/chat', async (req, res) => {
       }
     );
 
-    // ===== 第五步：解析Coze回复并返回 =====
-    const aiReply = cozeResponse.data.choices[0]?.message?.content || "AI暂无回复";
-    console.log("Coze回复成功：", aiReply.substring(0, 50) + "...");
+    // ===== 第五步：解析Coze V3回复并返回 =====
+    // 核心修改3：适配V3接口的返回格式
+    const aiReply = cozeResponse.data.messages?.[0]?.content || "AI暂无回复";
+    console.log("Coze V3回复成功：", aiReply.substring(0, 50) + "...");
     
     res.json({
       success: true,
       reply: aiReply,
       detail: {
-        model: cozeModelId,
-        requestId: cozeResponse.data.id || "无"
+        botId: cozeModelId,
+        requestId: cozeResponse.data.request_id || "无"
       }
     });
 
   } catch (error) {
     // ===== 核心：完善的错误日志（定位所有问题）=====
-    console.error("===== Coze接口调用详细错误 =====");
+    console.error("===== Coze V3接口调用详细错误 =====");
     console.error("基础错误信息：", error.message);
     console.error("Coze返回状态码：", error.response?.status);
     console.error("Coze返回原始数据：", error.response?.data);
     console.error("使用的Coze地址：", cozeEndpoint);
-    console.error("使用的模型ID：", cozeModelId);
+    console.error("使用的机器人ID：", cozeModelId);
     console.error("==================================");
 
     // 返回详细错误给小程序（方便定位）
@@ -125,7 +134,7 @@ app.post('/api/chat', async (req, res) => {
         errorMsg: error.message,
         statusCode: error.response?.status,
         cozeError: error.response?.data?.error?.message || "无Coze具体错误",
-        usedModelId: cozeModelId,
+        usedBotId: cozeModelId,
         usedEndpoint: cozeEndpoint
       }
     });
