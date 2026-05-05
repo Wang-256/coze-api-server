@@ -49,9 +49,8 @@ app.post('/api/chat', async (req, res) => {
 
     // ===== 第三步：读取Railway环境变量（Coze配置）=====
     cozeApiKey = process.env.COZE_API_KEY;
-    // 核心修改1：默认地址改为Coze V3接口（替代失效的V1地址）
     cozeEndpoint = process.env.COZE_API_ENDPOINT || "https://api.coze.cn/v3/chat";
-    cozeModelId = process.env.COZE_MODEL_ID; // 这里是Bot ID（7635586965693825030）
+    cozeModelId = process.env.COZE_MODEL_ID; // 你的Bot ID：7635586965693825030
 
     // 校验配置是否完整
     if (!cozeApiKey) {
@@ -81,38 +80,54 @@ app.post('/api/chat', async (req, res) => {
     const cozeResponse = await axios.post(
       cozeEndpoint,
       {
-        // 核心修改2：适配V3接口的参数格式
-        bot_id: cozeModelId, // 机器人ID（你的7635586965693825030）
-        user_id: "mini_program_user_001", // 固定用户ID（标识对话用户，随便填）
+        bot_id: cozeModelId,
+        user_id: "mini_program_user_001", // 固定用户ID，标识对话用户
         stream: false, // 关闭流式响应，同步返回结果
         additional_messages: [
           {
             role: "user",
-            content: message, // 用户发送的消息
-            content_type: "text" // 消息类型为文本
+            content: message,
+            content_type: "text"
           }
         ]
       },
       {
         headers: {
-          "Authorization": `Bearer ${cozeApiKey}`, // Bearer后必须加空格！
+          "Authorization": `Bearer ${cozeApiKey}`,
           "Content-Type": "application/json"
         },
-        timeout: 15000 // Coze请求超时时间（15秒）
+        timeout: 15000
       }
     );
 
-    // ===== 第五步：解析Coze V3回复并返回 =====
-    // 核心修改3：适配V3接口的返回格式
-    const aiReply = cozeResponse.data.messages?.[0]?.content || "AI暂无回复";
-    console.log("Coze V3回复成功：", aiReply.substring(0, 50) + "...");
+    // ===== 第五步：打印完整返回数据 + 兼容解析回复 =====
+    // 核心修改：打印完整返回，方便定位解析路径
+    console.log("===== Coze V3完整返回数据 =====");
+    console.log(JSON.stringify(cozeResponse.data, null, 2)); // 格式化打印，清晰看结构
+    
+    // 兼容多种V3返回格式，确保能取到回复
+    let aiReply = "AI暂无回复";
+    // 格式1：messages[0].content（标准V3格式）
+    if (cozeResponse.data.messages && cozeResponse.data.messages[0]?.content) {
+      aiReply = cozeResponse.data.messages[0].content;
+    }
+    // 格式2：choices[0].message.content（兼容旧V3格式）
+    else if (cozeResponse.data.choices && cozeResponse.data.choices[0]?.message?.content) {
+      aiReply = cozeResponse.data.choices[0].message.content;
+    }
+    // 格式3：直接返回content字段
+    else if (cozeResponse.data.content) {
+      aiReply = cozeResponse.data.content;
+    }
+
+    console.log("最终解析到的AI回复：", aiReply);
     
     res.json({
       success: true,
       reply: aiReply,
       detail: {
         botId: cozeModelId,
-        requestId: cozeResponse.data.request_id || "无"
+        requestId: cozeResponse.data.request_id || cozeResponse.data.id || "无"
       }
     });
 
