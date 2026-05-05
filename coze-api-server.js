@@ -6,54 +6,70 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// 首页测试
 app.get('/', (req, res) => {
-  res.send('✅ Coze API Server 运行正常！');
+  res.send('✅ Coze V3 异步接口服务已启动');
 });
 
-// 核心：Coze V3 官方标准接口
+// 核心聊天接口（适配Coze官方异步逻辑）
 app.post('/api/chat', async (req, res) => {
   try {
     const { message } = req.body;
-    if (!message) {
-      return res.json({ success: false, error: "请输入消息" });
-    }
-
     const cozeApiKey = process.env.COZE_API_KEY;
     const botId = process.env.COZE_MODEL_ID;
 
-    // 官方正确接口地址
-    const response = await axios.post('https://api.coze.cn/v3/chat', {
+    if (!message || !cozeApiKey || !botId) {
+      return res.json({ success: false, error: "参数缺失" });
+    }
+
+    const headers = { Authorization: `Bearer ${cozeApiKey}` };
+    const baseUrl = "https://api.coze.cn/v3";
+
+    // 1. 创建异步对话
+    const chatRes = await axios.post(`${baseUrl}/chat`, {
       bot_id: botId,
-      user_id: "user_001",
+      user_id: "pet_memory_user",
       stream: false,
-      // 官方标准消息格式
       messages: [{ role: "user", content: message }]
-    }, {
-      headers: {
-        "Authorization": `Bearer ${cozeApiKey}`,
-        "Content-Type": "application/json"
-      },
-      timeout: 20000
-    });
+    }, { headers });
 
-    // 官方标准返回解析
-    const aiReply = response.data.data?.messages?.find(m => m.role === "assistant")?.content || "AI暂无回复";
+    const chatId = chatRes.data.data.id;
+    const conversationId = chatRes.data.data.conversation_id;
+    let aiReply = "AI暂无回复";
 
-    res.json({
-      success: true,
-      reply: aiReply
-    });
+    // 2. 轮询查询消息（官方正确接口，最多等待10秒）
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      
+      // ✅ Coze官方标准查询消息接口
+      const msgRes = await axios.get(`${baseUrl}/chat/messages`, {
+        headers,
+        params: { conversation_id: conversationId, chat_id: chatId }
+      });
+
+      const messages = msgRes.data.data || [];
+      const assistantMsg = messages.find(item => item.role === "assistant");
+      
+      if (assistantMsg && assistantMsg.content) {
+        aiReply = assistantMsg.content;
+        break;
+      }
+    }
+
+    // 返回最终结果
+    res.json({ success: true, reply: aiReply });
 
   } catch (error) {
     res.json({
       success: false,
-      error: "AI回复失败",
+      error: "请求失败",
       detail: error.response?.data || error.message
     });
   }
 });
 
+// 启动服务
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 服务启动成功`);
+  console.log(`🚀 服务运行在端口 ${PORT}`);
 });
