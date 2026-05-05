@@ -1,0 +1,17 @@
+{
+  "name": "coze-api-server",
+  "version": "1.0.0",
+  "description": "Coze chat API server",
+  "main": "coze-api-server.js",
+  "scripts": {
+    "start": "node coze-api-server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.2",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=14.x"
+  }
+}
