@@ -6,21 +6,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// 根路径测试
 app.get('/', (req, res) => {
-  res.send('✅ Coze API Server 运行正常！');
+  res.send('✅ 正在调试：直接返回Coze原始数据');
 });
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'success', message: '服务正常运行' });
-});
-
+// 核心接口：直接返回Coze的原始响应
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message } = req.body;
+    const message = req.body.message;
     if (!message) {
       return res.json({ success: false, error: "缺少message参数" });
     }
 
+    // 读取Railway的环境变量
     const cozeApiKey = process.env.COZE_API_KEY;
     const cozeModelId = process.env.COZE_MODEL_ID;
     const cozeEndpoint = "https://api.coze.cn/v3/chat";
@@ -29,10 +28,10 @@ app.post('/api/chat', async (req, res) => {
       return res.json({ success: false, error: "Railway环境变量未配置" });
     }
 
-    // 调用Coze V3接口（已适配正确格式）
+    // 调用Coze V3接口
     const cozeResponse = await axios.post(cozeEndpoint, {
       bot_id: cozeModelId,
-      user_id: "mini_program_user_001",
+      user_id: "debug_user_001",
       stream: false,
       additional_messages: [{ role: "user", content: message, content_type: "text" }]
     }, {
@@ -40,17 +39,14 @@ app.post('/api/chat', async (req, res) => {
       timeout: 15000
     });
 
-    // 适配Coze V3接口的标准返回格式
-    const aiReply = cozeResponse.data.messages?.[0]?.content || "AI暂无回复";
-
-    // 直接返回结果给小程序
+    // 关键：直接把Coze的原始数据返回给前端，不做任何解析
     res.json({
       success: true,
-      reply: aiReply
+      raw_coze_response: cozeResponse.data // 原样返回Coze的响应
     });
 
   } catch (error) {
-    console.error("调用失败：", error.message, error.response?.data);
+    // 错误时返回详细信息
     res.json({
       success: false,
       error: "调用Coze失败",
@@ -61,5 +57,5 @@ app.post('/api/chat', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 服务启动，端口：${PORT}`);
+  console.log(`🚀 调试服务启动，端口：${PORT}`);
 });
