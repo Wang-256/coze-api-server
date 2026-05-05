@@ -10,53 +10,39 @@ app.get('/', (req, res) => {
   res.send('✅ Coze API Server 运行正常！');
 });
 
-// 核心接口：适配Coze V3异步接口 + 轮询获取结果
+// 核心：Coze V3 官方标准接口
 app.post('/api/chat', async (req, res) => {
   try {
     const { message } = req.body;
     if (!message) {
-      return res.json({ success: false, error: "缺少message参数" });
+      return res.json({ success: false, error: "请输入消息" });
     }
 
     const cozeApiKey = process.env.COZE_API_KEY;
-    const cozeModelId = process.env.COZE_MODEL_ID;
-    const baseUrl = "https://api.coze.cn/v3";
+    const botId = process.env.COZE_MODEL_ID;
 
-    // 1. 创建对话
-    const createRes = await axios.post(`${baseUrl}/chat`, {
-      bot_id: cozeModelId,
+    // 官方正确接口地址
+    const response = await axios.post('https://api.coze.cn/v3/chat', {
+      bot_id: botId,
       user_id: "user_001",
       stream: false,
-      additional_messages: [{ role: "user", content: message, content_type: "text" }]
+      // 官方标准消息格式
+      messages: [{ role: "user", content: message }]
     }, {
-      headers: { Authorization: `Bearer ${cozeApiKey}` },
-      timeout: 10000
+      headers: {
+        "Authorization": `Bearer ${cozeApiKey}`,
+        "Content-Type": "application/json"
+      },
+      timeout: 20000
     });
 
-    const chatId = createRes.data.data.id;
-    const conversationId = createRes.data.data.conversation_id;
-    let reply = "AI暂无回复";
+    // 官方标准返回解析
+    const aiReply = response.data.data?.messages?.find(m => m.role === "assistant")?.content || "AI暂无回复";
 
-    // 2. 轮询查询结果（最多查10次，每秒1次）
-    for (let i = 0; i < 10; i++) {
-      await new Promise(r => setTimeout(r, 1000));
-      
-      const queryRes = await axios.get(`${baseUrl}/chat/${chatId}`, {
-        headers: { Authorization: `Bearer ${cozeApiKey}` },
-        params: { conversation_id: conversationId }
-      });
-
-      const status = queryRes.data.data.status;
-      if (status === "completed") {
-        // 获取AI回复
-        const messages = queryRes.data.data.messages || [];
-        const aiMsg = messages.find(m => m.role === "assistant");
-        if (aiMsg) reply = aiMsg.content;
-        break;
-      }
-    }
-
-    res.json({ success: true, reply: reply });
+    res.json({
+      success: true,
+      reply: aiReply
+    });
 
   } catch (error) {
     res.json({
