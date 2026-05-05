@@ -1,53 +1,47 @@
+// 1. 引入所有需要的依赖（确保和package.json的依赖对应）
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+
+// 2. 创建Express应用实例
 const app = express();
 
-// 允许跨域请求（小程序必须）
-app.use(cors());
-// 解析JSON格式的请求体
-app.use(express.json());
+// 3. 配置中间件（解决跨域、解析JSON请求，必须加）
+app.use(cors()); // 允许跨域请求（前端调用API需要）
+app.use(express.json()); // 解析JSON格式的请求体
 
-// ================== 必须替换成你自己的内容 ==================
-const COZE_API_KEY = 'pat_yC3GgtjEUCop1ookPKeDHUj0FDz1RSDfyZbOFAsRBmv7AHXtolWt9JqT94QVavUt';
-const COZE_BOT_ID = '7635586965693825030';
-// ============================================================
-
-// Coze国内版固定的API接口地址（不用改）
-const COZE_API_URL = 'https://api.coze.cn/open_api/v2/chat';
-
-// 给小程序调用的专属转发接口
-app.post('/api/coze-chat', async (req, res) => {
-  try {
-    // 从小程序的请求里获取用户输入的内容、会话ID
-    const { query, conversation_id, user } = req.body;
-
-    // 转发请求给Coze的API接口
-    const cozeResponse = await axios.post(COZE_API_URL, {
-      bot_id: COZE_BOT_ID,
-      user: user || 'miniprogram_user',
-      query: query,
-      stream: false, // 先做非流式回复，简单易上手
-      conversation_id: conversation_id || ''
-    }, {
-      headers: {
-        'Authorization': `Bearer ${COZE_API_KEY}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }
-    });
-
-    // 把Coze返回的AI回复，原样返回给小程序
-    res.json(cozeResponse.data);
-  } catch (error) {
-    console.error('Coze API调用失败:', error.response?.data || error.message);
-    res.status(500).json({ error: '请求失败，请稍后重试' });
-  }
+// 4. 解决「Cannot GET /」的核心：添加根路径路由
+app.get('/', (req, res) => {
+  res.send('✅ Coze API Server 运行正常！');
 });
 
-// 启动服务器，默认端口3000
+// 5. 可选：添加健康检查接口（方便验证服务是否可用）
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'success',
+    message: '服务正常运行',
+    server: 'coze-api-server',
+    node_version: process.version
+  });
+});
+
+// ------------------- 以下保留你原有业务逻辑（如果有） -------------------
+// 提示：把你原来的API接口代码（比如和Coze聊天相关的接口）粘贴到这里
+// 示例（你可以替换成自己的业务代码）：
+// app.post('/api/chat', async (req, res) => {
+//   try {
+//     const response = await axios.post('Coze的API地址', req.body);
+//     res.json(response.data);
+//   } catch (error) {
+//     res.status(500).json({ error: '请求失败', message: error.message });
+//   }
+// });
+
+// 6. 配置端口（必须用Railway自动分配的端口，核心！）
 const PORT = process.env.PORT || 3000;
+
+// 7. 启动服务
 app.listen(PORT, () => {
-  console.log(`你的API接口服务器已启动，运行在端口 ${PORT}`);
-  console.log(`本地测试地址：http://localhost:${PORT}/api/coze-chat`);
+  console.log(`🚀 Coze API Server 启动成功！端口：${PORT}`);
+  console.log(`📌 访问地址：http://localhost:${PORT}`);
 });
